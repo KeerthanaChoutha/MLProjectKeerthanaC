@@ -112,7 +112,3 @@ if uploaded_file:
             st.plotly_chart(fig)
 else:
     st.info("Upload a ZIP file containing your dataset to begin.")
-
-git add .
-git commit -m "Initial commit: Streamlit app and dataset"
-git push -u origin main
