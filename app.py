@@ -90,12 +90,15 @@ if uploaded_file:
         # Feature importance (SHAP)
         st.write("### Feature Importance (SHAP)")
         with st.spinner("Computing SHAP values..."):
-            explainer = shap.TreeExplainer(rf)
-            shap_values = explainer.shap_values(X.iloc[:1000])  # Limit to first 1000 rows
-            plt.title("Feature Importance")
-            shap.summary_plot(shap_values[1], X.iloc[:1000], show=False)
-            st.pyplot(plt.gcf())
-            plt.clf()
+            try:
+                explainer = shap.TreeExplainer(rf)
+                shap_values = explainer.shap_values(X_train.iloc[:1000])  # Use training data subset
+                plt.title("Feature Importance")
+                shap.summary_plot(shap_values[1], X_train.iloc[:1000], show=False)
+                st.pyplot(plt.gcf())
+                plt.clf()
+            except Exception as e:
+                st.error(f"SHAP computation failed: {e}")
 
     # Geospatial clustering (Example with Plotly)
     if "state_name" in data.columns and "bias_desc" in data.columns:
@@ -112,4 +115,3 @@ if uploaded_file:
             st.plotly_chart(fig)
 else:
     st.info("Upload a ZIP file containing your dataset to begin.")
-
