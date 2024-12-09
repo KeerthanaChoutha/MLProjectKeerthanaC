@@ -1,11 +1,11 @@
 import streamlit as st
 import pandas as pd
 import zipfile
-import os
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report
+from sklearn.preprocessing import LabelEncoder
 import shap
 import matplotlib.pyplot as plt
 import plotly.express as px
@@ -33,7 +33,10 @@ if uploaded_file:
     if st.checkbox("Drop rows with missing values"):
         data = data.dropna()
         st.write("Missing values dropped.")
-    
+
+    # Fill missing values with zero
+    data = data.fillna(0)
+
     # Data exploration
     st.write("### Basic Statistics")
     st.write(data.describe())
@@ -47,15 +50,26 @@ if uploaded_file:
         X = data[features]
         y = data[target]
 
+        # Encode target column if it is categorical
+        if y.dtype == 'object':
+            le = LabelEncoder()
+            y = le.fit_transform(y)
+
+        # Encode categorical features
+        X = pd.get_dummies(X, drop_first=True)
+
         # Split the data
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
         # Train Logistic Regression
         st.write("#### Logistic Regression")
-        log_reg = LogisticRegression()
-        log_reg.fit(X_train, y_train)
-        st.write("Logistic Regression Performance:")
-        st.text(classification_report(y_test, log_reg.predict(X_test)))
+        log_reg = LogisticRegression(max_iter=5000, solver='lbfgs')
+        try:
+            log_reg.fit(X_train, y_train)
+            st.write("Logistic Regression Performance:")
+            st.text(classification_report(y_test, log_reg.predict(X_test)))
+        except Exception as e:
+            st.error(f"Logistic Regression failed: {e}")
 
         # Train Random Forest
         st.write("#### Random Forest Classifier")
