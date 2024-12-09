@@ -93,8 +93,15 @@ if uploaded_file:
             try:
                 explainer = shap.TreeExplainer(rf)
                 shap_values = explainer.shap_values(X_train.iloc[:1000])  # Use training data subset
+
+                # Handle binary or multi-class classification
+                if isinstance(shap_values, list):
+                    shap_values_to_plot = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+                else:
+                    shap_values_to_plot = shap_values
+
                 plt.title("Feature Importance")
-                shap.summary_plot(shap_values[1], X_train.iloc[:1000], show=False)
+                shap.summary_plot(shap_values_to_plot, X_train.iloc[:1000], show=False)
                 st.pyplot(plt.gcf())
                 plt.clf()
             except Exception as e:
