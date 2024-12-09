@@ -1,29 +1,20 @@
 import streamlit as st
 import pandas as pd
 import zipfile
-import os
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.preprocessing import LabelEncoder
 from sklearn.metrics import classification_report
+from sklearn.preprocessing import LabelEncoder
 import shap
 import matplotlib.pyplot as plt
 import plotly.express as px
 
 # Extract and load the dataset
 def load_data(zip_path):
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall("extracted_data")
-        extracted_files = os.listdir("extracted_data")
-        for file in extracted_files:
-            if file.endswith(".csv"):
-                return pd.read_csv(os.path.join("extracted_data", file))
-        st.error("No CSV file found in the ZIP archive.")
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-    return None
+    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+        zip_ref.extractall()
+    return pd.read_csv("hate_crime.csv")
 
 # App title
 st.title("Hate Crime Hotspot Prediction")
@@ -31,89 +22,97 @@ st.title("Hate Crime Hotspot Prediction")
 # File upload
 uploaded_file = st.file_uploader("Upload your dataset (ZIP format):", type=["zip"])
 if uploaded_file:
-    st.write("Processing the uploaded file...")
-    data = load_data(uploaded_file)
-    if data is not None:
-        try:
-            # Preview dataset
-            st.write("### Dataset Preview")
-            st.dataframe(data.head())
+    with st.spinner("Loading and preprocessing the dataset..."):
+        data = load_data(uploaded_file)
 
-            # Data cleaning options
-            st.write("### Data Cleaning Options")
-            if st.checkbox("Drop rows with missing values"):
-                data = data.dropna()
-                st.write("Missing values dropped.")
-            
-            # Data exploration
-            st.write("### Basic Statistics")
-            st.write(data.describe())
+        # Sample the data to improve performance
+        data = data.sample(n=5000, random_state=42)
 
-            # Feature selection for modeling
-            st.write("### Model Training")
-            target = st.selectbox("Select Target Column:", options=data.columns)
-            features = st.multiselect("Select Feature Columns:", options=[col for col in data.columns if col != target])
+    # Preview dataset
+    st.write("### Dataset Preview")
+    st.dataframe(data.head())
 
-            if features and target:
-                X = data[features]
-                y = data[target]
+    # Data cleaning options
+    st.write("### Data Cleaning Options")
+    if st.checkbox("Drop rows with missing values"):
+        with st.spinner("Dropping missing values..."):
+            data = data.dropna()
+        st.write("Missing values dropped.")
 
-                # Encode categorical variables
+    # Fill missing values with zero
+    with st.spinner("Filling missing values..."):
+        data = data.fillna(0)
+
+    # Data exploration
+    st.write("### Basic Statistics")
+    st.write(data.describe())
+
+    # Feature selection for modeling
+    st.write("### Model Training")
+    target = st.selectbox("Select Target Column:", options=data.columns)
+    features = st.multiselect("Select Feature Columns (limit to 10):", options=[col for col in data.columns if col != target])
+
+    if features and target:
+        with st.spinner("Preparing data for training..."):
+            X = data[features]
+            y = data[target]
+
+            # Encode target column if it is categorical
+            if y.dtype == 'object':
                 le = LabelEncoder()
-                if y.dtype == 'object':
-                    y = le.fit_transform(y)
-                X = pd.get_dummies(X, drop_first=True)
+                y = le.fit_transform(y)
 
-                # Split the data
-                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+            # Encode categorical features
+            X = pd.get_dummies(X, drop_first=True)
 
-                # Train Logistic Regression
-                st.write("#### Logistic Regression")
-                try:
-                    log_reg = LogisticRegression(max_iter=1000)
-                    log_reg.fit(X_train, y_train)
-                    st.write("Logistic Regression Performance:")
-                    st.text(classification_report(y_test, log_reg.predict(X_test)))
-                except Exception as e:
-                    st.error(f"Logistic Regression Error: {e}")
+            # Split the data
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
 
-                # Train Random Forest
-                st.write("#### Random Forest Classifier")
-                rf = RandomForestClassifier()
-                rf.fit(X_train, y_train)
-                st.write("Random Forest Performance:")
-                st.text(classification_report(y_test, rf.predict(X_test)))
+        # Train Logistic Regression
+        st.write("#### Logistic Regression")
+        with st.spinner("Training Logistic Regression model..."):
+            log_reg = LogisticRegression(max_iter=1000, solver='lbfgs')
+            try:
+                log_reg.fit(X_train, y_train)
+                st.write("Logistic Regression Performance:")
+                st.text(classification_report(y_test, log_reg.predict(X_test)))
+            except Exception as e:
+                st.error(f"Logistic Regression failed: {e}")
 
-                # Feature importance (SHAP)
-                st.write("### Feature Importance (SHAP)")
-                try:
-                    explainer = shap.TreeExplainer(rf)
-                    shap_values = explainer.shap_values(X_test)
-                    plt.title("Feature Importance")
-                    shap.summary_plot(shap_values, X_test, plot_type="bar", show=False)
-                    st.pyplot(plt.gcf())
-                    plt.clf()
-                except Exception as e:
-                    st.error(f"SHAP Error: {e}")
+        # Train Random Forest
+        st.write("#### Random Forest Classifier")
+        with st.spinner("Training Random Forest model..."):
+            rf = RandomForestClassifier(n_jobs=-1)
+            rf.fit(X_train, y_train)
+            st.write("Random Forest Performance:")
+            st.text(classification_report(y_test, rf.predict(X_test)))
 
-            # Geospatial clustering (Example with Plotly)
-            if "state_name" in data.columns and "bias_desc" in data.columns:
-                st.write("### Geospatial Insights")
-                try:
-                    fig = px.scatter_geo(
-                        data,
-                        locations="state_abbr",
-                        locationmode="USA-states",
-                        color="bias_desc",
-                        scope="usa",
-                        title="Bias Descriptions by State",
-                        hover_name="state_name"
-                    )
-                    st.plotly_chart(fig)
-                except Exception as e:
-                    st.error(f"Geospatial Visualization Error: {e}")
+        # Feature importance (SHAP)
+        st.write("### Feature Importance (SHAP)")
+        with st.spinner("Computing SHAP values..."):
+            explainer = shap.TreeExplainer(rf)
+            shap_values = explainer.shap_values(X.iloc[:1000])  # Limit to first 1000 rows
+            plt.title("Feature Importance")
+            shap.summary_plot(shap_values[1], X.iloc[:1000], show=False)
+            st.pyplot(plt.gcf())
+            plt.clf()
 
-        except Exception as main_e:
-            st.error(f"Unexpected error: {main_e}")
+    # Geospatial clustering (Example with Plotly)
+    if "state_name" in data.columns and "bias_desc" in data.columns:
+        st.write("### Geospatial Insights")
+        with st.spinner("Generating geospatial visualization..."):
+            fig = px.scatter_geo(
+                data,
+                locations="state_name",
+                locationmode="USA-states",
+                color="bias_desc",
+                scope="usa",
+                title="Bias Descriptions by State",
+            )
+            st.plotly_chart(fig)
 else:
     st.info("Upload a ZIP file containing your dataset to begin.")
+
+git add .
+git commit -m "Initial commit: Streamlit app and dataset"
+git push -u origin main
