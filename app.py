@@ -24,6 +24,9 @@ uploaded_file = st.file_uploader("Upload your dataset (ZIP format):", type=["zip
 if uploaded_file:
     data = load_data(uploaded_file)
 
+    # Sample the data to improve performance
+    data = data.sample(n=5000, random_state=42)
+
     # Preview dataset
     st.write("### Dataset Preview")
     st.dataframe(data.head())
@@ -44,7 +47,7 @@ if uploaded_file:
     # Feature selection for modeling
     st.write("### Model Training")
     target = st.selectbox("Select Target Column:", options=data.columns)
-    features = st.multiselect("Select Feature Columns:", options=[col for col in data.columns if col != target])
+    features = st.multiselect("Select Feature Columns (limit to 10):", options=[col for col in data.columns if col != target])
 
     if features and target:
         X = data[features]
@@ -63,7 +66,7 @@ if uploaded_file:
 
         # Train Logistic Regression
         st.write("#### Logistic Regression")
-        log_reg = LogisticRegression(max_iter=5000, solver='lbfgs')
+        log_reg = LogisticRegression(max_iter=1000, solver='lbfgs')
         try:
             log_reg.fit(X_train, y_train)
             st.write("Logistic Regression Performance:")
@@ -73,7 +76,7 @@ if uploaded_file:
 
         # Train Random Forest
         st.write("#### Random Forest Classifier")
-        rf = RandomForestClassifier()
+        rf = RandomForestClassifier(n_jobs=-1)
         rf.fit(X_train, y_train)
         st.write("Random Forest Performance:")
         st.text(classification_report(y_test, rf.predict(X_test)))
@@ -81,9 +84,9 @@ if uploaded_file:
         # Feature importance (SHAP)
         st.write("### Feature Importance (SHAP)")
         explainer = shap.TreeExplainer(rf)
-        shap_values = explainer.shap_values(X)
+        shap_values = explainer.shap_values(X.iloc[:1000])  # Limit to first 1000 rows
         plt.title("Feature Importance")
-        shap.summary_plot(shap_values[1], X, show=False)
+        shap.summary_plot(shap_values[1], X.iloc[:1000], show=False)
         st.pyplot(plt.gcf())
         plt.clf()
 
